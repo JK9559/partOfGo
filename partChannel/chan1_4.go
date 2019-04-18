@@ -1,6 +1,10 @@
 package partChannel
 
-import "fmt"
+import (
+	"fmt"
+	"math/rand"
+	"time"
+)
 
 // https://studygolang.com/articles/9531
 
@@ -42,6 +46,7 @@ func getNotification(s string) chan string {
 	return notifyChan
 }
 
+// 服务化
 func getNotificationDemo() {
 	tom := getNotification("Tom")
 	tony := getNotification("Tony")
@@ -50,6 +55,114 @@ func getNotificationDemo() {
 	fmt.Println(<-tony)
 }
 
+func complexOper(x int) int {
+	time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
+	return 100 - x
+}
+
+func branch(x int) chan int {
+	ch := make(chan int)
+	go func() {
+		ch <- complexOper(x)
+	}()
+	return ch
+}
+
+func fanIn(chs ...chan int) chan int {
+	ch := make(chan int)
+	//for _, c := range chs {
+	//	go func(c chan int) {
+	//		ch <- <-c
+	//	}(c)
+	//}
+
+	go func() {
+		for i := 0; i < len(chs); i++ {
+			select {
+			case v1 := <-chs[i]:
+				ch <- v1
+			}
+		}
+	}()
+	return ch
+}
+
+// 多路复用 进行一个复杂的操作 如运算。分为三路运算最后将信道的数据合并到一个信道
+// 我们需要按顺序输出我们的返回值
+func multiUseChannel() {
+	resCh := fanIn(branch(1), branch(3), branch(200))
+
+	for i := 0; i < 3; i++ {
+		fmt.Println(<-resCh)
+	}
+}
+
+func selectListen(i int) chan int {
+	ch := make(chan int)
+	go func() {
+		time.Sleep(1 * time.Millisecond)
+		ch <- i
+	}()
+	return ch
+}
+
+// 通过for循环和select来取信道里的值，当主协程执行完毕，无限循环的for也就停止执行了
+// 通过select来监听信道
+func selectListenDemo() {
+	c1, c2, c3 := selectListen(1), selectListen(2), selectListen(3)
+	ch := make(chan int)
+
+	go func() {
+		for {
+			select {
+			case v1 := <-c1:
+				ch <- v1
+			case v2 := <-c2:
+				ch <- v2
+			case v3 := <-c3:
+				ch <- v3
+			}
+		}
+	}()
+
+	for i := 0; i < 3; i++ {
+		fmt.Println(<-ch)
+	}
+}
+
+// select信道的超时处理
+func selectTimeOut() {
+	timeout := time.After(10 * time.Millisecond)
+	c1, c2, c3 := selectListen(1), selectListen(2), selectListen(3)
+	ch := make(chan int)
+
+	go func() {
+		for is_timeout := false; !is_timeout; {
+			select {
+			case v1 := <-c1:
+				ch <- v1
+			case v2 := <-c2:
+				ch <- v2
+			case v3 := <-c3:
+				ch <- v3
+			case <-timeout:
+				is_timeout = true
+			}
+		}
+	}()
+
+	for i := 0; i < 3; i++ {
+		fmt.Println(<-ch)
+		fmt.Println(len(ch))
+		//if len(ch) <= 0 {
+		//	break
+		//}
+	}
+}
+
 func Chan1_4() {
-	getIntsDemo()
+	//getIntsDemo()
+	//multiUseChannel()
+	//selectListenDemo()
+	selectTimeOut()
 }
